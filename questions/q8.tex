@@ -1,14 +1,117 @@
 \section{Байесовская оптимизация. Функции улучшения.}
 
-% \begin{figure}[H]
-% 	\centering
-% 	\begin{minipage}[b]{0.4\textwidth}
-% 		\includegraphics[width=\textwidth]{images/dfa.png}
-% 		\caption{Пример графа переходов детерминированного КА.}
-% 	\end{minipage}
-% 	\hfill
-% 	\begin{minipage}[b]{0.4\textwidth}
-% 		\includegraphics[width=\textwidth]{images/ndfa.png}
-% 		\caption{Пример графа переходов недетерминированного КА с самопроизвольными переходами.}
-% 	\end{minipage}
-% \end{figure}
+\href{https://academy.yandex.ru/handbook/ml/article/podbor-giperparametrov}{HPO Ya}
+
+Вычисление целевой функции для оценки работы алгоритма при
+подборе гиперпараметров может занимать длительное время.
+
+Для уменьшения числа вычислений целевой функции усложним
+алгоритм оптимизации.
+
+\D{
+    Суррогатная функция = аппроксимация целевой функции.
+}
+
+Алгоритм оптимизации будет оптимизировать суррогатную функцию.
+
+Дорогие вызовы целевой функции будут расходоваться на формирование
+трейна для обучения суррогатной функции.
+
+Процесс тренировки суррогатной функции похож на активное обучение, где в процессе обучения формируется
+датасет. Однако нам важно не качество аппроксимации, а качество
+оптимизации целевой функции.
+
+Дилема:
+\begin{itemize}
+    \item Explore: approx целевую
+    \item Exploit: opt целевую
+\end{itemize}
+
+\D{
+    Acquisition function (улучшение) = функция, которая по
+    суррогатной указывает, в какой точке нужно вычислить
+    значение целевой функции.
+}
+
+Алгоритм БО:
+\begin{itemize}
+    \item $\alpha_t$ = acquisition function after t steps
+    \item $f$ = целевая функция
+    \item $S_t = \{f(x_i) | i < t\}$ = предыдущие наблюдения
+    \begin{itemize}
+        \item $x_{t+1} = \arg \max_{x \in X} \alpha_t (x)$
+        \item $S_{t+1} = S_{t} \cup \{f(x_{t+1})\}$
+        \item $\alpha_{t+1} = best(\alpha | S_{t+1})$
+    \end{itemize}
+\end{itemize}
+
+\subsection*{UCB}
+
+\D{
+    Acquisition function (улучшение) = в случае UCB комбинирует предсказание
+    и неопределенность.
+
+    $\mu(x) + \lambda \sigma(x)$
+
+    На практике неопределенность уменьшается с исследованием,
+    поэтому берут растущую $\lambda$
+
+    $\lambda(t) = O(\sqrt{\log t})$ 
+}
+
+\subsection*{Вероятность улучшения (PI)}
+
+\D{
+    Improvement: $I(x) = max(f(x) - f(x^*), 0)$
+}
+
+\T{
+    Пусть $f(x) \sim \mathcal{N}(\mu(x), \sigma^2(x))$, f - целевая функция, $x^*$ -
+    текущее наилучшее решение, $\mu$ - предсказание, $\sigma$ -
+    стандартное отклонение.
+
+    Тогда $f(x) = \mu(x) + \sigma(x) \cdot z$, где $z \sim \mathcal{N}(0, 1)$
+
+    $I(x) = max(\mu(x) + \sigma(x) \cdot z - f(x^*), 0)$
+
+    $PI(x) = Pr(I(x) > 0) = Pr(f(x) \geq f(x^*))$
+
+    Можно представить как интеграл плотности от $z_0 = \frac{f(x^*) - \mu(x)}{\sigma(x)}$
+    до бесконечности. Тогда:
+
+    $PI(x) = 1 - \Phi(z_0) = \Phi(-z_0) = \Phi(\frac{\mu(x) - f(x^*)}{\sigma(x)})$
+}
+
+\subsection*{Expected Improvement}
+
+$EI(x) = E[I(x)] = \int_{-\infty}^{\infty} I(x) \phi(z) dz =
+\int_{-\infty}^{\infty} max(f(x) - f(x^*), 0) \phi(z) dz = \\
+\underbrace{\int_{-\infty}^{z_0} I(x)\phi(z) \phi(z) dz}_{I(x) = 0 \Rightarrow \int = 0} +
+\int_{z_0}^{\infty} I(x) \phi(z) dz =
+\int_{z_0}^{\infty} (\mu - \sigma z - f(x^*)) \phi(z) dz = \\
+(\mu - f(x^*)) \int_{z_0}^{\infty} \phi(z) dz +
+\sigma \int_{z_0}^{\infty} z \phi(z) dz =
+(\mu - f(x^*)) \Phi(-z_0) +
+\sigma \phi(z_0)$
+
+С помощью параметра $\xi$ можно контролировать неопределенность:
+
+$EI_\xi(x) = (\mu - f(x^*) - \xi) \Phi(\frac{\mu - f(x^*) - \xi}{\sigma}) +
+\sigma \phi(\frac{\mu - f(x^*) - \xi}{\sigma})$
+
+\subsection*{Древовидная оценка Парзена}
+
+Вместо $p(y | x)$ оценивается $p(x|y)\ и\ p(y)$,
+где $x$ - гиперпараметры, $y$ - оценка качества модели,
+$y^*$ - порог качества.
+
+\begin{equation}
+    p(x | y) = 
+    \begin{cases}
+        l(x) & y < y^* \\
+        g(x) & y \geq y^*
+    \end{cases}
+\end{equation}
+$l, g$ - модели плотности, обученные на разных множествах.
+
+Acquisition function $\sim \frac{g(x)}{l(x)}$
